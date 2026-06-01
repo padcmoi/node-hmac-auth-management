@@ -1,0 +1,28 @@
+# Runtime
+node_modules
+dist
+coverage
+
+# Build artifacts
+*.tsbuildinfo
+.tsup
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Local scratch / planning artifacts (kept out of the lib publication)
+.trash/
+
+# pnpm
+.pnpm-store
