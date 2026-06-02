@@ -159,6 +159,11 @@ services:
       - ../:/workspace
       - app_d_lib_modules:/workspace/node_modules
       - app_d_app_modules:/workspace/poc/app-d-nuxt/node_modules
+      # Nuxt 4 build artifacts: kept inside named volumes so they never
+      # spill onto the host bind-mount (which would otherwise pollute the
+      # repo and trigger noisy ?? entries on `git status`).
+      - app_d_nuxt_dir:/workspace/poc/app-d-nuxt/.nuxt
+      - app_d_output_dir:/workspace/poc/app-d-nuxt/.output
     environment:
       NUXT_HOST: "0.0.0.0"
       NUXT_PORT: "3000"
@@ -191,6 +196,11 @@ services:
       - ../:/workspace
       - app_e_lib_modules:/workspace/node_modules
       - app_e_app_modules:/workspace/poc/app-e-nextjs/node_modules
+      # Next.js 15 build artifacts: kept inside named volumes so they
+      # never spill onto the host bind-mount (which would otherwise
+      # pollute the repo and trigger noisy ?? entries on `git status`).
+      - app_e_next_dir:/workspace/poc/app-e-nextjs/.next
+      - app_e_swc_dir:/workspace/poc/app-e-nextjs/.swc
     environment:
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
@@ -219,5 +229,9 @@ volumes:
   api_c_app_modules:
   app_d_lib_modules:
   app_d_app_modules:
+  app_d_nuxt_dir:
+  app_d_output_dir:
   app_e_lib_modules:
   app_e_app_modules:
+  app_e_next_dir:
+  app_e_swc_dir:
