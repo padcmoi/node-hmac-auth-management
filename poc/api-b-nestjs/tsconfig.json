@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node10",
+    "ignoreDeprecations": "6.0",
+    "strict": false,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false
+  },
+  "include": ["src"]
+}

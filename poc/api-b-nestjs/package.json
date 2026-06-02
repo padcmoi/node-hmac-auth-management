@@ -1,0 +1,30 @@
+{
+  "name": "mgmt-poc-api-b",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "ts-node src/main.ts",
+    "check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@naskot/node-hmac-auth": "^1.3.0",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "redis": "^5.8.2",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
