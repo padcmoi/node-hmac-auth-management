@@ -28,3 +28,7 @@ Thumbs.db
 
 # pnpm
 .pnpm-store
+
+# POC lockfiles regenerated on every `docker compose up`
+poc/*/package-lock.json
+poc/*/pnpm-lock.yaml
