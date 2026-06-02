@@ -6,6 +6,9 @@ coverage
 # Build artifacts
 *.tsbuildinfo
 .tsup
+.nuxt
+.next
+.output
 
 # Logs
 logs
@@ -18,7 +21,6 @@ pnpm-debug.log*
 Thumbs.db
 
 # IDE
-.vscode
 .idea
 
 # Local scratch / planning artifacts (kept out of the lib publication)
