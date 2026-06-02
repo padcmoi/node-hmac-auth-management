@@ -1,0 +1,223 @@
+services:
+  # --- MariaDB for api_a's ManagedCrud (TypeORM-backed) ---
+  mariadb:
+    image: mariadb:11
+    container_name: mgmt-poc-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpwd
+      MARIADB_DATABASE: hmac_mgmt
+      MARIADB_USER: hmac
+      MARIADB_PASSWORD: hmacpwd
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  # --- 5 Redis instances, one per service ---
+  redis_a:
+    image: redis:7-alpine
+    container_name: mgmt-poc-redis-a
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+  redis_b:
+    image: redis:7-alpine
+    container_name: mgmt-poc-redis-b
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+  redis_c:
+    image: redis:7-alpine
+    container_name: mgmt-poc-redis-c
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+  redis_d:
+    image: redis:7-alpine
+    container_name: mgmt-poc-redis-d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+  redis_e:
+    image: redis:7-alpine
+    container_name: mgmt-poc-redis-e
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+  # --- API A: the authority. NestJS + @naskot/node-hmac-auth-management + TypeORM/MariaDB ---
+  api_a:
+    image: node:22-alpine
+    container_name: mgmt-poc-api-a
+    working_dir: /workspace/poc/api-a-nestjs
+    restart: unless-stopped
+    depends_on:
+      redis_a:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - ../:/workspace
+      - api_a_lib_modules:/workspace/node_modules
+      - api_a_app_modules:/workspace/poc/api-a-nestjs/node_modules
+    environment:
+      PORT: "3000"
+      REDIS_URL: "redis://redis_a:6379"
+      HMAC_NAMESPACE: "api_a"
+      HMAC_SECRET_TOKEN: "token_alpha_A"
+      HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
+      HMAC_PROPAGATION_KEY: "self_propagation_signer"
+      MGMT_SYNC_INTERVAL_MS: "20000"
+      MARIADB_HOST: "mariadb"
+      MARIADB_PORT: "3306"
+      MARIADB_USER: "hmac"
+      MARIADB_PASSWORD: "hmacpwd"
+      MARIADB_DATABASE: "hmac_mgmt"
+    ports:
+      - "3010:3000"
+    command: sh -lc "cd /workspace && npm install --legacy-peer-deps && npm run build && cd /workspace/poc/api-a-nestjs && npm install --legacy-peer-deps && npm run start"
+
+  # --- API B: a NestJS target. Vanilla upstream lib + business route ---
+  api_b:
+    image: node:22-alpine
+    container_name: mgmt-poc-api-b
+    working_dir: /workspace/poc/api-b-nestjs
+    restart: unless-stopped
+    depends_on:
+      redis_b:
+        condition: service_healthy
+    volumes:
+      - ../:/workspace
+      - api_b_lib_modules:/workspace/node_modules
+      - api_b_app_modules:/workspace/poc/api-b-nestjs/node_modules
+    environment:
+      PORT: "3000"
+      REDIS_URL: "redis://redis_b:6379"
+      HMAC_NAMESPACE: "api_b"
+      HMAC_SECRET_TOKEN: "token_beta_B"
+      HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
+      HMAC_PROPAGATION_KEY: "self_propagation_signer"
+      SERVICE_NAME: "api_b_nestjs"
+    ports:
+      - "3011:3000"
+    command: sh -lc "cd /workspace/poc/api-b-nestjs && npm install --legacy-peer-deps && npm run start"
+
+  # --- API C: an Express target. Vanilla upstream lib + business route ---
+  api_c:
+    image: node:22-alpine
+    container_name: mgmt-poc-api-c
+    working_dir: /workspace/poc/api-c-express
+    restart: unless-stopped
+    depends_on:
+      redis_c:
+        condition: service_healthy
+    volumes:
+      - ../:/workspace
+      - api_c_lib_modules:/workspace/node_modules
+      - api_c_app_modules:/workspace/poc/api-c-express/node_modules
+    environment:
+      PORT: "3000"
+      REDIS_URL: "redis://redis_c:6379"
+      HMAC_NAMESPACE: "api_c"
+      HMAC_SECRET_TOKEN: "token_gamma_C"
+      HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
+      HMAC_PROPAGATION_KEY: "self_propagation_signer"
+      SERVICE_NAME: "api_c_express"
+    ports:
+      - "3012:3000"
+    command: sh -lc "cd /workspace/poc/api-c-express && npm install --legacy-peer-deps && npm run start"
+
+  # --- App D: Nuxt. Backend integrates BOTH libs. Frontend UI to ping A/B/C ---
+  app_d:
+    image: node:22-alpine
+    container_name: mgmt-poc-app-d
+    working_dir: /workspace/poc/app-d-nuxt
+    restart: unless-stopped
+    depends_on:
+      redis_d:
+        condition: service_healthy
+    volumes:
+      - ../:/workspace
+      - app_d_lib_modules:/workspace/node_modules
+      - app_d_app_modules:/workspace/poc/app-d-nuxt/node_modules
+    environment:
+      NUXT_HOST: "0.0.0.0"
+      NUXT_PORT: "3000"
+      REDIS_URL: "redis://redis_d:6379"
+      HMAC_NAMESPACE: "app_d"
+      HMAC_SECRET_TOKEN: "token_delta_D"
+      HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
+      HMAC_PROPAGATION_KEY: "self_propagation_signer"
+      SERVICE_NAME: "app_d_nuxt"
+      PEER_API_A: "http://api_a:3000"
+      PEER_API_B: "http://api_b:3000"
+      PEER_API_C: "http://api_c:3000"
+      PEER_APP_E: "http://app_e:3000"
+      SIGNING_CLIENT_ID: "client_consumer_d"
+      ADMIN_API_A_BASE: "http://api_a:3000"
+    ports:
+      - "3013:3000"
+    command: sh -lc "cd /workspace/poc/app-d-nuxt && npm install --legacy-peer-deps && npm run dev"
+
+  # --- App E: Next.js 15+. Backend integrates @naskot/node-hmac-auth (Server Actions). Frontend UI to ping A/B/C/D ---
+  app_e:
+    image: node:22-alpine
+    container_name: mgmt-poc-app-e
+    working_dir: /workspace/poc/app-e-nextjs
+    restart: unless-stopped
+    depends_on:
+      redis_e:
+        condition: service_healthy
+    volumes:
+      - ../:/workspace
+      - app_e_lib_modules:/workspace/node_modules
+      - app_e_app_modules:/workspace/poc/app-e-nextjs/node_modules
+    environment:
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      REDIS_URL: "redis://redis_e:6379"
+      HMAC_NAMESPACE: "app_e"
+      HMAC_SECRET_TOKEN: "token_epsilon_E"
+      HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
+      HMAC_PROPAGATION_KEY: "self_propagation_signer"
+      SERVICE_NAME: "app_e_nextjs"
+      PEER_API_A: "http://api_a:3000"
+      PEER_API_B: "http://api_b:3000"
+      PEER_API_C: "http://api_c:3000"
+      PEER_APP_D: "http://app_d:3000"
+      SIGNING_CLIENT_ID: "client_consumer_e"
+    ports:
+      - "3014:3000"
+    command: sh -lc "cd /workspace/poc/app-e-nextjs && npm install --legacy-peer-deps && npm run dev"
+
+volumes:
+  mariadb_data:
+  api_a_lib_modules:
+  api_a_app_modules:
+  api_b_lib_modules:
+  api_b_app_modules:
+  api_c_lib_modules:
+  api_c_app_modules:
+  app_d_lib_modules:
+  app_d_app_modules:
+  app_e_lib_modules:
+  app_e_app_modules:
