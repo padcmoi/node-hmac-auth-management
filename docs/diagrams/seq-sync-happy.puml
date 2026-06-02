@@ -1,0 +1,78 @@
+@startuml seq-sync-happy
+title sync() - happy path (first run, fresh targets, one data-plane row)
+
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+
+actor "Consumer\n(cron / route / loop)" as App
+participant "track.sync\n(management/track)" as Track
+participant "runSync\n(management/sync)" as Sync
+participant "propagationKeyCache" as Cache
+participant "ManagedCrud\n(consumer-supplied)" as Crud
+participant "probeTarget\n(management/health)" as Probe
+participant "pushRowToTarget\n(management/push)" as Push
+participant "hmacHttpAuth\n.propagateClientToApis" as Up
+collections "Targets (B, C, D)\n/api/internal/hmac" as Targets
+database "Source local Redis\n(via upstream)" as RedisSrc
+
+App -> Track : mgmt.http.sync()
+Track -> Sync : runSync(deps)
+Sync -> Cache : read propagation-key row
+Cache --> Sync : propRow (status="pending", secret=pepper)
+Sync -> Crud : listPending()
+Crud --> Sync : [propRow, dataRow_alpha]
+Sync -> Sync : compute target union = {B, C, D}
+
+== Ensure local propagation-key hash ==
+Sync -> RedisSrc : hmacAuth.clients.get(propKey)
+RedisSrc --> Sync : null (first sync)
+Sync -> Sync : UUID + hashClientSecret(pepper+UUID, token)
+Sync -> RedisSrc : hmacAuth.clients.setSecretHash(\n  propKey, hash, ..., purpose:"propagation-only")
+
+== Phase A: probe + bootstrap propagation key on every target ==
+loop for each target T in {B, C, D}
+  Sync -> Probe : probeTarget(T)
+  Probe -> Up : propagateClientToApis(operation:"health", [T])
+  Up -> Targets : GET T/api/internal/hmac (signed)
+  Targets --> Up : 200 { clientsCount:0, bootstrapLocked:true, ... }
+  Up --> Probe : health body
+  Probe --> Sync : TargetHealth { reachable:true, clientsCount:0, bootstrapLocked:true }
+  Sync -> Crud : getDeliveryState(propRow.id, T)
+  Crud --> Sync : null (never delivered yet)
+  Sync -> Push : pushRowToTarget(propKey, T, hash,\n  purpose:"propagation-only", signer:undefined)
+  note right
+    signer = undefined because
+    clientsCount === 0 (bootstrap window).
+    The target accepts an unsigned POST
+    matching requireBootstrapClientId.
+  end note
+  Push -> Up : propagateClientToApis(operation:"create",\n  clientId:propKey, secretHash:hash,\n  purpose:"propagation-only", fromDbSeed:true)
+  Up -> Targets : POST T/api/internal/hmac
+  Targets --> Up : 201 { ok, operation:"create", clientId:propKey }
+  Up --> Push : { accepted:true }
+  Push --> Sync : PushRowResult { accepted:true, effectiveOperation:"create" }
+  Sync -> Crud : setDeliveryState(propRow.id, T,\n  state:"delivered", attemptCount:1)
+end
+
+== Phase B: propagation-key BDD finalize ==
+Sync -> Crud : update(propRow.id, {\n  status:"ok", secret:null, lastSyncedAt:now,\n  targets:[B,C,D] (union)\n})
+
+== Phase C: data-plane atomic propagation ==
+Sync -> Sync : UUID + hashClientSecret(dataRow.secret+UUID, token)
+loop for each target T in {B, C, D}
+  Sync -> Push : pushRowToTarget(dataRow, T, hash,\n  signer: signed-by-propKey, operation:"create")
+  Push -> Up : propagateClientToApis(operation:"create",\n  clientId:dataRow.clientId, secretHash:hash,\n  fromDbSeed:true, apiFetch:signer)
+  Up -> Targets : POST T/api/internal/hmac (signed by propKey)
+  Targets --> Up : 201 { ok, operation:"create", clientId:dataRow.clientId }
+  Push --> Sync : { accepted:true, effectiveOperation:"create" }
+  Sync -> Crud : setDeliveryState(dataRow.id, T, "delivered")
+end
+
+== All accepted: persist on source local + flip BDD row ==
+Sync -> RedisSrc : hmacAuth.clients.setSecretHash(\n  dataRow.clientId, hash, ..., fromDbSeed:false)
+Sync -> Crud : update(dataRow.id, {\n  status:"ok", secret:null, lastSyncedAt:now,\n  attemptCount:1\n})
+
+Sync --> Track : SyncSummary {\n  rows: { propagated:1, errored:0, deleted:0, processed:2 },\n  propagationKey: { pushedThisSync:true, targets:{delivered:[B,C,D]} },\n  perTarget: Map<T, { delivered:1, refused:0 }>\n}
+Track --> App : SyncSummary
+
+@enduml

@@ -1,0 +1,76 @@
+@startuml seq-sync-rollback
+title sync() - atomic rollback on partial failure
+
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+
+actor "Consumer" as App
+participant "runSync" as Sync
+participant "ManagedCrud" as Crud
+participant "pushRowToTarget" as Push
+participant "deleteRowOnTarget\nrevertRowOnTarget" as Rollback
+collections "Target A" as TgtA
+collections "Target B\n(unreachable / refusing)" as TgtB
+database "Source local Redis" as RedisSrc
+
+note over Sync
+  Pre-condition: propagation key already
+  delivered on both targets, source local
+  has the propagation-key hash. dataRow
+  has status="pending" with a fresh plain.
+end note
+
+App -> Sync : mgmt.http.sync()
+Sync -> Sync : UUID + hash(dataRow.secret + UUID, token)
+
+== Phase C: parallel push, one target refuses ==
+Sync -> Push : pushRowToTarget(dataRow, A, hash, signed)
+Push -> TgtA : POST /api/internal/hmac
+TgtA --> Push : 201 { ok, operation:"create" }
+Push --> Sync : { accepted:true, effectiveOperation:"create" }
+Sync -> Crud : setDeliveryState(dataRow.id, A, "delivered")
+
+Sync -> Push : pushRowToTarget(dataRow, B, hash, signed)
+Push -> TgtB : POST /api/internal/hmac
+TgtB --> Push : 4xx / 5xx / network error
+Push --> Sync : { accepted:false, reason:"target unreachable" }
+Sync -> Crud : setDeliveryState(dataRow.id, B, "errored", reason)
+
+== Detect partial failure -> rollback every accepted target ==
+note over Sync
+  acceptedTargets = [{A, effectiveOperation:"create"}]
+  refusedTargets  = [B]
+
+  Strategy per target:
+    - effective "create" -> DELETE
+    - effective "update" -> PATCH revert
+  (no TTL backup exists for fresh creates,
+   so PATCH revert would be a no-op there.)
+end note
+
+Sync -> Rollback : deleteRowOnTarget(A, dataRow.clientId, signed)
+Rollback -> TgtA : DELETE /api/internal/hmac
+TgtA --> Rollback : 201 { ok, operation:"delete" }
+Rollback --> Sync : { accepted:true }
+
+note over Sync
+  No local rollback: source local Redis
+  was never written this sync (the write
+  only happens in the all-accepted path).
+end note
+
+Sync -> Crud : update(dataRow.id, {\n  status:"error", reason:"B: target unreachable",\n  secret:null, lastSyncedAt:now,\n  attemptCount:row.attemptCount+1\n})
+
+Sync --> App : SyncSummary {\n  rows: { propagated:0, errored:1, processed:1, deleted:0 },\n  perTarget: { A: { delivered:1, refused:0 }, B: { delivered:0, refused:1 } }\n}
+
+note over RedisSrc
+  Convergence:
+    - Source local: still absent (unchanged).
+    - Target A: had nothing -> DELETE was no-op-friendly -> nothing.
+    - Target B: had nothing -> nothing.
+  Federation back to its pre-sync state.
+  Consumer must insert a fresh plain to retry
+  (the UUID consumed this sync is burned).
+end note
+
+@enduml

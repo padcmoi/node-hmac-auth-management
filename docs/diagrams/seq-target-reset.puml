@@ -1,0 +1,68 @@
+@startuml seq-target-reset
+title sync() - Trap 4 target reset detection and recovery
+
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+
+actor "Consumer" as App
+participant "runSync" as Sync
+participant "probeTarget" as Probe
+participant "ManagedCrud" as Crud
+participant "pushRowToTarget" as Push
+collections "Target A\n(Redis wiped between syncs)" as TgtA
+
+note over TgtA
+  Prior sync had propagated the propagation
+  key + data-plane rows alpha + beta on A.
+  Between syncs, the operator restarted A's
+  Redis with --rdb-disabled OR cluster lost
+  its state. A now reports clientsCount=0.
+end note
+
+App -> Sync : mgmt.http.sync()
+
+== Phase A: probe detects the reset ==
+Sync -> Probe : probeTarget(A)
+Probe -> TgtA : GET /api/internal/hmac (signed)
+TgtA --> Probe : 200 { clientsCount: 0, bootstrapLocked: true, ... }
+Probe --> Sync : TargetHealth { reachable:true, clientsCount:0, bootstrapLocked:true }
+
+Sync -> Crud : getDeliveryState(propRow.id, A)
+Crud --> Sync : { state:"delivered", lastDeliveredAt:<prior sync> }
+
+note over Sync
+  targetWiped detected:
+    health.reachable === true
+    AND health.clientsCount === 0
+    AND deliveryState.state === "delivered"
+end note
+
+== Flip every row that targets A back to "pending" for A ==
+Sync -> Crud : for each dataRow targeting A:\n  setDeliveryState(row.id, A,\n    state:"pending", attemptCount:0)
+Crud --> Sync : ok
+
+== Re-push the propagation key via the bootstrap window ==
+Sync -> Push : pushRowToTarget(propKey, A, hash,\n  purpose:"propagation-only", signer:undefined)
+Push -> TgtA : POST /api/internal/hmac (unsigned, clientsCount=0 path)
+TgtA --> Push : 201 { ok, operation:"create", clientId:propKey }
+Sync -> Crud : setDeliveryState(propRow.id, A, "delivered")
+
+== Phase C re-processes every flipped data-plane row for A ==
+loop for each row whose delivery on A is now "pending"
+  Sync -> Push : pushRowToTarget(row, A, fresh-UUID hash, signed)
+  Push -> TgtA : POST /api/internal/hmac (signed by propKey)
+  TgtA --> Push : 201
+  Sync -> Crud : setDeliveryState(row.id, A, "delivered")
+end
+
+note over TgtA
+  A is back to full nominal state:
+  propagation key + every data-plane row
+  that listed A in its targets.
+  Other targets in the federation were
+  not touched.
+end note
+
+Sync --> App : SyncSummary {\n  propagationKey: { pushedThisSync:true, targets:{delivered:[A]} },\n  rows: { propagated:N, ... }\n}
+
+@enduml

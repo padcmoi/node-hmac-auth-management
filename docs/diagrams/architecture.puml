@@ -1,0 +1,84 @@
+@startuml architecture
+title @naskot/node-hmac-auth-management - Component overview
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+left to right direction
+
+package "Consumer App (NestJS / Express / Nuxt / framework-agnostic)" as App {
+  component "Cron / route / loop\n(consumer-driven sync trigger)" as Trigger
+  component "Admin endpoints\n(add / update / remove)" as Admin
+  database "BDD\n(any storage: SQL, Mongo,\nin-memory, REST proxy)" as Bdd
+  component "ManagedCrud impl\n(consumer-supplied)" as Crud
+}
+
+package "@naskot/node-hmac-auth-management" as Lib {
+  component "core/types + core/errors\n(ManagedRow, ManagedCrud,\nSyncSummary, TargetHealth,\nHmacAuthMgmtError)" as Types
+  component "core/derive\n(deriveSecretV1 - FROZEN)" as Derive
+  component "management/init\n(createHmacAuthManagement)" as Init
+  component "management/auto-seed\n(propagation-key row at boot)" as AutoSeed
+  component "management/track\n(9-method per-track surface)" as Track
+  component "management/sync\n(Phase A/B/C/D orchestrator)" as Sync
+  component "management/push\n(per-target push + retry swap\n+ delete + revert)" as Push
+  component "management/health\n(probe + bootstrapLocked)" as Health
+  component "state/propagation-key-cache\n(1 read per boot)" as Cache
+}
+
+package "@naskot/node-hmac-auth (>=1.3.0, peerDep)" as Upstream {
+  component "initializeHmacHttpAuth\n+ clients CRUD\n+ propagateClientToApis\n+ createHttpSignedFetchClient" as HttpInit
+  component "initializeHmacMessageAuth\n+ clients CRUD" as MsgInit
+}
+
+database "Source local Redis\n(via upstream lib)" as RedisSource
+
+cloud "Federation of targets\n(any v1.3.0+ API)" as Targets
+
+' --- consumer wiring ---
+Trigger --> Track : mgmt.http.sync()
+Admin --> Track : mgmt.http.add() / update() / remove()
+Track --> Crud : read + write
+Crud --> Bdd : SQL / NoSQL / REST
+
+' --- internal wiring ---
+Init --> AutoSeed : await runAutoSeed() at boot
+Init --> Track : createTrack(...) per declared track
+Init --> Cache : createPropagationKeyCache(...)
+AutoSeed --> Derive : deriveSecretV1(secretToken, propagationKey)
+AutoSeed --> Crud : create propagation-key row when missing
+Track --> Sync : delegates sync() call
+Sync --> Cache : read propagation-key row
+Sync --> Health : probeTarget(target)
+Sync --> Push : pushRowToTarget / deleteRowOnTarget / revertRowOnTarget
+Sync --> Crud : setDeliveryState + update row status
+
+' --- upstream wiring ---
+Sync --> HttpInit : propagateClientToApis\n(signed by propagation key)
+Sync --> HttpInit : clients.setSecretHash\n+ clients.revert + clients.delete
+Sync --> MsgInit : same surface for message track\n(targetStore: "message" on the wire)
+HttpInit --> RedisSource : credential CRUD
+HttpInit ..> Targets : signed HTTP propagation\n(POST/PUT/PATCH/DELETE\n/api/internal/hmac)
+
+note bottom of Sync
+  Phase A: probe + bootstrap propagation key
+           (per-target, detects Trap 4 target reset)
+  Phase B: clear propagation-key plain after first push
+  Phase C: data-plane rows, atomic with rollback
+           (DELETE for create, PATCH revert for update)
+  Phase D: delete_pending, best-effort
+end note
+
+note right of Track
+  Public surface (9 methods):
+  add / update / remove ........ BDD-only writes
+  sync ......................... worker (only thing
+                                 touching Redis + net)
+  get / list ................... read-only
+  health / healthAll ........... probe
+  getDeliveryStatus ............ per-(row, target) cursor
+
+  add/update/remove on the
+  propagation-key clientId
+  throw PROPAGATION_KEY_REMOVE_FORBIDDEN.
+end note
+
+@enduml
