@@ -1,17 +1,28 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
-@Entity({ name: "hmac_http_seed" })
-@Index("uq_http_client_id", ["clientId"], { unique: true })
-@Index("idx_http_status_kind", ["status", "kind"])
-export class HmacHttpSeedEntity {
+/**
+ * Data-plane seed credentials managed by api_a's `mgmt.<track>.add/update/remove`.
+ * v0.2.0 r3: ONE table for both tracks (HTTP + message). The `track` column
+ * routes each seed to the right credential store on the target side. The
+ * propagation key is NOT in this table (it has no row, see
+ * `hmac_http_propagation_key_targets`).
+ *
+ * Uniqueness:
+ *   - (clientId, track) is unique. The same clientId can exist in both
+ *     tracks, but never twice in the same track.
+ */
+@Entity({ name: "hmac_data_plane_seed" })
+@Index("uq_data_plane_client_id_track", ["clientId", "track"], { unique: true })
+@Index("idx_data_plane_status_track", ["status", "track"])
+export class HmacDataPlaneSeedEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
   @Column({ type: "varchar", length: 128, name: "client_id" })
   clientId!: string;
 
-  @Column({ type: "enum", enum: ["data_plane", "propagation_key"], default: "data_plane" })
-  kind!: "data_plane" | "propagation_key";
+  @Column({ type: "enum", enum: ["http", "message"], default: "http" })
+  track!: "http" | "message";
 
   @Column({ type: "text", nullable: true })
   secret!: string | null;

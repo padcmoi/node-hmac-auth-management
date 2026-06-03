@@ -1,14 +1,15 @@
 import { Module, type MiddlewareConsumer, type NestModule } from "@nestjs/common";
 import { TypeOrmModule, getDataSourceToken } from "@nestjs/typeorm";
 import type { DataSource } from "typeorm";
-import { HmacHttpSeedEntity } from "./entities/hmac-http-seed.entity";
-import { HmacHttpSeedDeliveryStateEntity } from "./entities/hmac-http-seed-delivery-state.entity";
+import { HmacHttpPropagationKeyTargetEntity } from "./entities/hmac-http-propagation-key-target.entity";
+import { HmacDataPlaneSeedEntity } from "./entities/hmac-data-plane-seed.entity";
+import { HmacDataPlaneDeliveryStateEntity } from "./entities/hmac-data-plane-delivery-state.entity";
 import { HmacAuthService } from "./hmac-auth.service";
 import { HmacAuthManagementService } from "./hmac-auth-management.service";
 import { HmacSyncScheduler } from "./hmac-sync.scheduler";
 import { HmacInternalManagementMiddleware, HmacVerifyHttpRequestMiddleware, PermissiveCorsMiddleware } from "./hmac.middlewares";
 import { AppController } from "./app.controller";
-import { AdminRowsController, AdminDeliveryStatesController, AdminSyncController } from "./admin.controller";
+import { AdminPropagationKeyTargetsController, AdminDataPlaneController, AdminSyncController } from "./admin.controller";
 
 @Module({
   imports: [
@@ -19,13 +20,13 @@ import { AdminRowsController, AdminDeliveryStatesController, AdminSyncController
       username: process.env.MARIADB_USER ?? "hmac",
       password: process.env.MARIADB_PASSWORD ?? "hmacpwd",
       database: process.env.MARIADB_DATABASE ?? "hmac_mgmt",
-      entities: [HmacHttpSeedEntity, HmacHttpSeedDeliveryStateEntity],
+      entities: [HmacHttpPropagationKeyTargetEntity, HmacDataPlaneSeedEntity, HmacDataPlaneDeliveryStateEntity],
       synchronize: true,
       logging: false,
     }),
-    TypeOrmModule.forFeature([HmacHttpSeedEntity, HmacHttpSeedDeliveryStateEntity]),
+    TypeOrmModule.forFeature([HmacHttpPropagationKeyTargetEntity, HmacDataPlaneSeedEntity, HmacDataPlaneDeliveryStateEntity]),
   ],
-  controllers: [AppController, AdminRowsController, AdminDeliveryStatesController, AdminSyncController],
+  controllers: [AppController, AdminPropagationKeyTargetsController, AdminDataPlaneController, AdminSyncController],
   providers: [
     {
       provide: HmacAuthService,
