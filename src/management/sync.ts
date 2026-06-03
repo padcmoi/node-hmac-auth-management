@@ -417,16 +417,37 @@ export async function runSync(deps: RunSyncDeps) {
           track: deps.trackStore,
           target,
         });
-        // Trap 4: flip data-plane rows targeting this target back to pending
+        // Trap 4: flip data-plane rows targeting this target back to pending.
+        //
+        // We must iterate over EVERY data-plane row (not only the pending
+        // ones) because the typical case is "every row already delivered ->
+        // status=ok -> not in pendingRows". The cursor flip alone is not
+        // enough: Phase C only processes rows whose top-level status is
+        // 'pending', so we also flip status back to 'pending' for any row
+        // targeting the wiped target. Picked up by Phase C on the same
+        // tick (re-propagation), no operator action required.
         const now = new Date();
-        for (const row of pendingRows) {
-          if (row.kind === "data_plane" && row.targets.includes(target)) {
-            await deps.crud.setDeliveryState(row.id, target, {
-              state: "pending",
-              lastAttemptAt: now,
-              attemptCount: 0,
-            });
+        const allRows = await deps.crud.listAll();
+        const idsToReprocess = new Set<string>();
+        for (const row of allRows) {
+          if (row.kind !== "data_plane") continue;
+          if (!row.targets.includes(target)) continue;
+          await deps.crud.setDeliveryState(row.id, target, {
+            state: "pending",
+            lastAttemptAt: now,
+            attemptCount: 0,
+          });
+          if (row.status === "ok" || row.status === "error") {
+            await deps.crud.update(row.id, { status: "pending", reason: null });
+            idsToReprocess.add(row.id);
           }
+        }
+        if (idsToReprocess.size > 0) {
+          // Refresh pendingRows so Phase C sees the freshly-flipped rows.
+          const refreshed = await deps.crud.listPending();
+          pendingRows.length = 0;
+          for (const r of refreshed) pendingRows.push(r);
+          summary.rows.processed = pendingRows.length;
         }
       }
 
