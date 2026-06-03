@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { listLocalCredentials, listPeerCredentials, pingPeer } from "./actions";
 
 const PEERS = ["api_a", "api_b", "api_c", "app_d"] as const;
@@ -57,14 +58,19 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 space-y-10">
-      <header className="border-b pb-4">
-        <h1 className="text-2xl font-semibold">Next.js 15 - app_e_nextjs</h1>
-        <p className="text-sm text-slate-600">
-          Backend integrates <code className="bg-slate-200 px-1 rounded">@naskot/node-hmac-auth</code> via a singleton. Buttons
-          trigger Server Actions; the action signs the outbound request with
-          <code className="bg-slate-200 px-1 rounded mx-1">client_consumer_e</code>
-          (propagated by api_a) and returns the verbatim peer response.
-        </p>
+      <header className="border-b pb-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold">Next.js 15 - app_e_nextjs</h1>
+          <p className="text-sm text-slate-600">
+            Backend integrates <code className="bg-slate-200 px-1 rounded">@naskot/node-hmac-auth</code> via a singleton. Buttons
+            trigger Server Actions; the action signs the outbound request with
+            <code className="bg-slate-200 px-1 rounded mx-1">client_consumer_e</code>
+            (propagated by api_a) and returns the verbatim peer response.
+          </p>
+        </div>
+        <Link href="/redis" className="px-3 py-1.5 rounded-md bg-slate-900 text-white text-sm">
+          Open Redis viewer
+        </Link>
       </header>
 
       <section>
