@@ -32,3 +32,6 @@ Thumbs.db
 # POC lockfiles regenerated on every `docker compose up`
 poc/*/package-lock.json
 poc/*/pnpm-lock.yaml
+
+# POC environment (real credentials) - `.env.sample` is the committed template
+poc/.env

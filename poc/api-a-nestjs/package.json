@@ -10,7 +10,7 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@naskot/node-hmac-auth": "^1.3.0",
+    "@naskot/node-hmac-auth": "^1.4.0",
     "@naskot/node-hmac-auth-management": "file:../..",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
