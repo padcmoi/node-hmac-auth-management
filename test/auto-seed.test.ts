@@ -10,6 +10,7 @@ const TOKEN = "source_token_alpha";
 
 function buildSourceAuth() {
   return initializeHmacHttpAuth({
+    requireBootstrapClientId: PROPAGATION_KEY ?? "self_propagation_signer",
     redis: new FakeRedis(),
     namespace: "tenant_source",
     secretToken: TOKEN,
@@ -73,21 +74,23 @@ describe("createHmacAuthManagement - auto-seed", () => {
     ).rejects.toMatchObject({ code: "INVALID_OPTIONS" });
   });
 
-  it("refuses to boot without a non-empty propagationKey", async () => {
+  it("falls back to the federation-default clientId when propagationKey is empty or omitted", async () => {
     const { crud } = createInMemoryCrud();
     const hmacHttpAuth = buildSourceAuth();
-    await expect(
-      createHmacAuthManagement({
-        hmacHttpAuth,
-        propagationKey: "   ",
-        http: { crud },
-      })
-    ).rejects.toMatchObject({ code: "INVALID_OPTIONS" });
+    const mgmt = await createHmacAuthManagement({
+      hmacHttpAuth,
+      propagationKey: "   ",
+      http: { crud },
+    });
+    expect(mgmt.propagationKey).toBe("self_propagation_signer");
+    const row = await crud.getPropagationKeyRow();
+    expect(row?.clientId).toBe("self_propagation_signer");
   });
 
   it("refuses to boot when hmacHttpAuth has no secretToken", async () => {
     const { crud } = createInMemoryCrud();
     const hmacHttpAuth = initializeHmacHttpAuth({
+      requireBootstrapClientId: PROPAGATION_KEY ?? "self_propagation_signer",
       redis: new FakeRedis(),
       namespace: "tenant_no_token",
       internalManagementRoute: ROUTE,

@@ -10,6 +10,7 @@ const ROUTE = "/api/internal/hmac";
 
 function buildSourceAuth() {
   return initializeHmacHttpAuth({
+    requireBootstrapClientId: PROPAGATION_KEY ?? "self_propagation_signer",
     redis: new FakeRedis(),
     namespace: "tenant_source",
     secretToken: "source_token_alpha",
@@ -19,11 +20,11 @@ function buildSourceAuth() {
 
 function buildTargetAuth(label: string, secretToken: string) {
   return initializeHmacHttpAuth({
+    requireBootstrapClientId: PROPAGATION_KEY,
     redis: new FakeRedis(),
     namespace: `tenant_${label}`,
     secretToken,
     internalManagementRoute: ROUTE,
-    requireBootstrapClientId: PROPAGATION_KEY,
   });
 }
 
@@ -191,11 +192,11 @@ describe("HmacAuthManagement.http.sync - end-to-end", () => {
     const hmacHttpAuth = buildSourceAuth();
     const targetARedis = new FakeRedis();
     const targetA: InitializedHmacHttpAuth = initializeHmacHttpAuth({
+      requireBootstrapClientId: PROPAGATION_KEY,
       redis: targetARedis,
       namespace: "tenant_target_a",
       secretToken: "target_token_beta",
       internalManagementRoute: ROUTE,
-      requireBootstrapClientId: PROPAGATION_KEY,
     });
     const targetAUrl = "http://target_a";
 

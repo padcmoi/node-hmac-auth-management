@@ -9,6 +9,7 @@ const ROUTE = "/api/internal/hmac";
 
 function buildSourceAuth() {
   return initializeHmacHttpAuth({
+    requireBootstrapClientId: PROPAGATION_KEY ?? "self_propagation_signer",
     redis: new FakeRedis(),
     namespace: "tenant_source",
     secretToken: "source_token_alpha",
