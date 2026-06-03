@@ -1,0 +1,12 @@
+{
+  "name": "mgmt-poc-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-reporter=spec run.test.mjs"
+  },
+  "dependencies": {
+    "redis": "^5.8.2"
+  }
+}
