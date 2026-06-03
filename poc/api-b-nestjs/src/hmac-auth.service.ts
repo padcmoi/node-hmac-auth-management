@@ -1,5 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { initializeHmacHttpAuth, type InitializedHmacHttpAuth } from "@naskot/node-hmac-auth";
+import {
+  initializeHmacHttpAuth,
+  initializeHmacMessageAuth,
+  type InitializedHmacHttpAuth,
+  type InitializedHmacMessageAuth,
+} from "@naskot/node-hmac-auth";
 import { createClient, type RedisClientType } from "redis";
 
 /**
@@ -13,10 +18,12 @@ import { createClient, type RedisClientType } from "redis";
 @Injectable()
 export class HmacAuthService {
   readonly auth: InitializedHmacHttpAuth;
+  readonly messageAuth: InitializedHmacMessageAuth;
   readonly redis: RedisClientType;
 
-  constructor(auth: InitializedHmacHttpAuth, redis: RedisClientType) {
+  constructor(auth: InitializedHmacHttpAuth, messageAuth: InitializedHmacMessageAuth, redis: RedisClientType) {
     this.auth = auth;
+    this.messageAuth = messageAuth;
     this.redis = redis;
   }
 
@@ -26,14 +33,21 @@ export class HmacAuthService {
       console.error("[api_b] redis error", error);
     });
     await redis.connect();
+    const redisLike = redis as unknown as Parameters<typeof initializeHmacHttpAuth>[0]["redis"];
+    const namespace = process.env.HMAC_NAMESPACE ?? "api_b";
+    const secretToken = process.env.HMAC_SECRET_TOKEN ?? "token_beta_B";
+    // Message auth is bridged into HTTP init so the internal-management
+    // middleware can route `kind: "message"` propagation payloads to the
+    // message credential store (otherwise the lib stays HTTP-only).
+    const messageAuth = initializeHmacMessageAuth({ redis: redisLike, namespace, secretToken });
     const auth = initializeHmacHttpAuth({
-      redis: redis as unknown as Parameters<typeof initializeHmacHttpAuth>[0]["redis"],
-      namespace: process.env.HMAC_NAMESPACE ?? "api_b",
-      secretToken: process.env.HMAC_SECRET_TOKEN ?? "token_beta_B",
+      redis: redisLike,
+      namespace,
+      secretToken,
       internalManagementRoute: process.env.HMAC_INTERNAL_MANAGEMENT_ROUTE ?? "/api/internal/hmac",
-      requireBootstrapClientId: process.env.HMAC_PROPAGATION_KEY ?? "self_propagation_signer",
+      messageAuth,
     });
-    return new HmacAuthService(auth, redis);
+    return new HmacAuthService(auth, messageAuth, redis);
   }
 
   listClientIds() {

@@ -1,5 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { initializeHmacHttpAuth, type InitializedHmacHttpAuth } from "@naskot/node-hmac-auth";
+import {
+  initializeHmacHttpAuth,
+  initializeHmacMessageAuth,
+  type InitializedHmacHttpAuth,
+  type InitializedHmacMessageAuth,
+} from "@naskot/node-hmac-auth";
 import { createClient, type RedisClientType } from "redis";
 
 /**
@@ -19,10 +24,12 @@ import { createClient, type RedisClientType } from "redis";
 @Injectable()
 export class HmacAuthService {
   readonly auth: InitializedHmacHttpAuth;
+  readonly messageAuth: InitializedHmacMessageAuth;
   readonly redis: RedisClientType;
 
-  constructor(auth: InitializedHmacHttpAuth, redis: RedisClientType) {
+  constructor(auth: InitializedHmacHttpAuth, messageAuth: InitializedHmacMessageAuth, redis: RedisClientType) {
     this.auth = auth;
+    this.messageAuth = messageAuth;
     this.redis = redis;
   }
 
@@ -37,14 +44,28 @@ export class HmacAuthService {
     // runtime but tsc cannot infer the equivalence (overloads on hGet,
     // set, etc.). We cast through `unknown` to silence the noise; the
     // runtime call path is exercised by the lib's own vitest suite.
-    const auth = initializeHmacHttpAuth({
-      redis: redis as unknown as Parameters<typeof initializeHmacHttpAuth>[0]["redis"],
-      namespace: process.env.HMAC_NAMESPACE ?? "api_a",
-      secretToken: process.env.HMAC_SECRET_TOKEN ?? "token_alpha_A",
-      internalManagementRoute: process.env.HMAC_INTERNAL_MANAGEMENT_ROUTE ?? "/api/internal/hmac",
-      requireBootstrapClientId: process.env.HMAC_PROPAGATION_KEY ?? "self_propagation_signer",
+    const redisLike = redis as unknown as Parameters<typeof initializeHmacHttpAuth>[0]["redis"];
+    const namespace = process.env.HMAC_NAMESPACE ?? "api_a";
+    const secretToken = process.env.HMAC_SECRET_TOKEN ?? "token_alpha_A";
+    // Message track shares the same Redis + namespace; the upstream lib
+    // segregates the message-credential keys with its own internal prefixes
+    // so the HTTP and message stores never collide. We initialize it BEFORE
+    // the HTTP auth so we can bridge it into the HTTP runtime: bridging is
+    // mandatory for handleInternalManagementRequest to route `kind: "message"`
+    // payloads to the message store on the target side.
+    const messageAuth = initializeHmacMessageAuth({
+      redis: redisLike,
+      namespace,
+      secretToken,
     });
-    return new HmacAuthService(auth, redis);
+    const auth = initializeHmacHttpAuth({
+      redis: redisLike,
+      namespace,
+      secretToken,
+      internalManagementRoute: process.env.HMAC_INTERNAL_MANAGEMENT_ROUTE ?? "/api/internal/hmac",
+      messageAuth,
+    });
+    return new HmacAuthService(auth, messageAuth, redis);
   }
 
   listClientIds() {

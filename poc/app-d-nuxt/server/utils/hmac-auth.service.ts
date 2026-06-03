@@ -1,4 +1,9 @@
-import { initializeHmacHttpAuth, type InitializedHmacHttpAuth } from "@naskot/node-hmac-auth";
+import {
+  initializeHmacHttpAuth,
+  initializeHmacMessageAuth,
+  type InitializedHmacHttpAuth,
+  type InitializedHmacMessageAuth,
+} from "@naskot/node-hmac-auth";
 import { createClient, type RedisClientType } from "redis";
 
 /**
@@ -14,30 +19,41 @@ import { createClient, type RedisClientType } from "redis";
 
 const GLOBAL_KEY = Symbol.for("@mgmt-poc/app_d/hmac-auth-service");
 
+type Built = { auth: InitializedHmacHttpAuth; messageAuth: InitializedHmacMessageAuth; redis: RedisClientType };
+
 type Cached = {
   auth: InitializedHmacHttpAuth;
+  messageAuth: InitializedHmacMessageAuth;
   redis: RedisClientType;
-  promise: Promise<{ auth: InitializedHmacHttpAuth; redis: RedisClientType }> | null;
+  promise: Promise<Built> | null;
 };
 
-async function build() {
+async function build(): Promise<Built> {
   const config = useRuntimeConfig();
   const redis: RedisClientType = createClient({ url: config.redisUrl as string });
   redis.on("error", (error) => console.error("[app_d] redis error", error));
   await redis.connect();
+  const redisLike = redis as unknown as Parameters<typeof initializeHmacHttpAuth>[0]["redis"];
+  const namespace = config.hmacNamespace as string;
+  const secretToken = config.hmacSecretToken as string;
+  // Bridge message auth into HTTP init so app_d accepts propagated
+  // message-track credentials on its internal management route.
+  const messageAuth = initializeHmacMessageAuth({ redis: redisLike, namespace, secretToken });
   const auth = initializeHmacHttpAuth({
-    redis: redis as unknown as Parameters<typeof initializeHmacHttpAuth>[0]["redis"],
-    namespace: config.hmacNamespace as string,
-    secretToken: config.hmacSecretToken as string,
+    redis: redisLike,
+    namespace,
+    secretToken,
     internalManagementRoute: config.hmacInternalManagementRoute as string,
-    requireBootstrapClientId: config.hmacPropagationKey as string,
+    messageAuth,
+    // requireBootstrapClientId omitted -> defaults to self_propagation_signer
   });
-  return { auth, redis };
+  return { auth, messageAuth, redis };
 }
 
 export async function getHmacAuthService() {
   const slot = ((globalThis as Record<symbol, unknown>)[GLOBAL_KEY] ??= {
     auth: undefined,
+    messageAuth: undefined,
     redis: undefined,
     promise: null,
   }) as Cached;
@@ -45,6 +61,7 @@ export async function getHmacAuthService() {
   if (!slot.promise) slot.promise = build();
   const built = await slot.promise;
   slot.auth = built.auth;
+  slot.messageAuth = built.messageAuth;
   slot.redis = built.redis;
   return slot;
 }
