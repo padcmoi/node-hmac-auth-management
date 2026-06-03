@@ -85,13 +85,18 @@ services:
       HMAC_NAMESPACE: "api_a"
       HMAC_SECRET_TOKEN: "token_alpha_A"
       HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
-      HMAC_PROPAGATION_KEY: "self_propagation_signer"
       MGMT_SYNC_INTERVAL_MS: "20000"
-      MARIADB_HOST: "mariadb"
-      MARIADB_PORT: "3306"
-      MARIADB_USER: "hmac"
-      MARIADB_PASSWORD: "hmacpwd"
-      MARIADB_DATABASE: "hmac_mgmt"
+      MARIADB_HOST: ${MARIADB_HOST}
+      MARIADB_PORT: ${MARIADB_PORT}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      PEER_API_A: "http://api_a:3000"
+      PEER_API_B: "http://api_b:3000"
+      PEER_API_C: "http://api_c:3000"
+      PEER_APP_D: "http://app_d:3000"
+      PEER_APP_E: "http://app_e:3000"
+      POC_AUTO_SEED_DATA_PLANE: '[{"clientId":"client_consumer_d","secret":"consumer-d-secret"},{"clientId":"client_consumer_e","secret":"consumer-e-secret"}]'
     ports:
       - "3010:3000"
     command: sh -lc "cd /workspace && npm install --legacy-peer-deps && npm run build && cd /workspace/poc/api-a-nestjs && npm install --legacy-peer-deps && npm run start"
@@ -115,7 +120,6 @@ services:
       HMAC_NAMESPACE: "api_b"
       HMAC_SECRET_TOKEN: "token_beta_B"
       HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
-      HMAC_PROPAGATION_KEY: "self_propagation_signer"
       SERVICE_NAME: "api_b_nestjs"
     ports:
       - "3011:3000"
@@ -140,7 +144,6 @@ services:
       HMAC_NAMESPACE: "api_c"
       HMAC_SECRET_TOKEN: "token_gamma_C"
       HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
-      HMAC_PROPAGATION_KEY: "self_propagation_signer"
       SERVICE_NAME: "api_c_express"
     ports:
       - "3012:3000"
@@ -159,19 +162,14 @@ services:
       - ../:/workspace
       - app_d_lib_modules:/workspace/node_modules
       - app_d_app_modules:/workspace/poc/app-d-nuxt/node_modules
-      # Nuxt 4 build artifacts: kept inside named volumes so they never
-      # spill onto the host bind-mount (which would otherwise pollute the
-      # repo and trigger noisy ?? entries on `git status`).
-      - app_d_nuxt_dir:/workspace/poc/app-d-nuxt/.nuxt
-      - app_d_output_dir:/workspace/poc/app-d-nuxt/.output
     environment:
+      NODE_ENV: "production"
       NUXT_HOST: "0.0.0.0"
       NUXT_PORT: "3000"
       REDIS_URL: "redis://redis_d:6379"
       HMAC_NAMESPACE: "app_d"
       HMAC_SECRET_TOKEN: "token_delta_D"
       HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
-      HMAC_PROPAGATION_KEY: "self_propagation_signer"
       SERVICE_NAME: "app_d_nuxt"
       PEER_API_A: "http://api_a:3000"
       PEER_API_B: "http://api_b:3000"
@@ -181,7 +179,11 @@ services:
       ADMIN_API_A_BASE: "http://api_a:3000"
     ports:
       - "3013:3000"
-    command: sh -lc "cd /workspace/poc/app-d-nuxt && npm install --legacy-peer-deps && npm run dev"
+    # Production mode with rebuild-on-change watcher (slower than `nuxt dev`'s HMR
+    # but stable: each file change triggers a clean `nuxt build` + restart of the
+    # Nitro server, exactly like a real prod deploy). `--include=dev` ensures
+    # nodemon (the file watcher) is installed despite NODE_ENV=production.
+    command: sh -lc "cd /workspace/poc/app-d-nuxt && npm install --legacy-peer-deps --include=dev && npm run start:watch"
 
   # --- App E: Next.js 15+. Backend integrates @naskot/node-hmac-auth (Server Actions). Frontend UI to ping A/B/C/D ---
   app_e:
@@ -196,28 +198,94 @@ services:
       - ../:/workspace
       - app_e_lib_modules:/workspace/node_modules
       - app_e_app_modules:/workspace/poc/app-e-nextjs/node_modules
-      # Next.js 15 build artifacts: kept inside named volumes so they
-      # never spill onto the host bind-mount (which would otherwise
-      # pollute the repo and trigger noisy ?? entries on `git status`).
-      - app_e_next_dir:/workspace/poc/app-e-nextjs/.next
-      - app_e_swc_dir:/workspace/poc/app-e-nextjs/.swc
     environment:
+      NODE_ENV: "production"
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
       REDIS_URL: "redis://redis_e:6379"
       HMAC_NAMESPACE: "app_e"
       HMAC_SECRET_TOKEN: "token_epsilon_E"
       HMAC_INTERNAL_MANAGEMENT_ROUTE: "/api/internal/hmac"
-      HMAC_PROPAGATION_KEY: "self_propagation_signer"
       SERVICE_NAME: "app_e_nextjs"
       PEER_API_A: "http://api_a:3000"
       PEER_API_B: "http://api_b:3000"
       PEER_API_C: "http://api_c:3000"
       PEER_APP_D: "http://app_d:3000"
       SIGNING_CLIENT_ID: "client_consumer_e"
+      # Per-peer Redis URLs for the read-only /redis viewer. Same Docker
+      # internal network, no HMAC needed (pure Redis reads).
+      REDIS_URL_API_A: "redis://redis_a:6379"
+      REDIS_URL_API_B: "redis://redis_b:6379"
+      REDIS_URL_API_C: "redis://redis_c:6379"
+      REDIS_URL_APP_D: "redis://redis_d:6379"
+      REDIS_URL_APP_E: "redis://redis_e:6379"
+      # Per-peer namespaces (matches each service's HMAC_NAMESPACE).
+      PEER_NS_API_A: "api_a"
+      PEER_NS_API_B: "api_b"
+      PEER_NS_API_C: "api_c"
+      PEER_NS_APP_D: "app_d"
+      PEER_NS_APP_E: "app_e"
     ports:
       - "3014:3000"
-    command: sh -lc "cd /workspace/poc/app-e-nextjs && npm install --legacy-peer-deps && npm run dev"
+    # Production mode with rebuild-on-change watcher (slower than `next dev`'s HMR
+    # but stable: each file change triggers a clean `next build` + restart of
+    # `next start`, exactly like a real prod deploy). `--include=dev` ensures
+    # nodemon (the file watcher) is installed despite NODE_ENV=production.
+    command: sh -lc "cd /workspace/poc/app-e-nextjs && npm install --legacy-peer-deps --include=dev && npm run start:watch"
+
+  # --- E2E test runner: one-shot container. Runs AFTER every service is
+  # --- started, exercises the federation end-to-end (data-plane status,
+  # --- per-peer Redis content, cross-token hashes, resilience). Exits
+  # --- non-zero on any assertion failure: `docker compose ps` then shows
+  # --- "Exit 1" and `docker logs mgmt-poc-e2e` surfaces the regression.
+  e2e_tests:
+    image: node:22-alpine
+    container_name: mgmt-poc-e2e
+    working_dir: /workspace/poc/e2e-tests
+    restart: "no"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis_a:
+        condition: service_healthy
+      redis_b:
+        condition: service_healthy
+      redis_c:
+        condition: service_healthy
+      redis_d:
+        condition: service_healthy
+      redis_e:
+        condition: service_healthy
+      api_a:
+        condition: service_started
+      api_b:
+        condition: service_started
+      api_c:
+        condition: service_started
+      app_d:
+        condition: service_started
+      app_e:
+        condition: service_started
+    volumes:
+      - ../:/workspace
+      - e2e_tests_modules:/workspace/poc/e2e-tests/node_modules
+      # docker.sock so the resilience test can stop/start app_d via the
+      # host docker daemon (`docker stop mgmt-poc-app-d`).
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      SYNC_INTERVAL_MS: "20000"
+      API_A_BASE: "http://api_a:3000"
+      APP_D_BASE: "http://app_d:3000"
+      APP_E_BASE: "http://app_e:3000"
+      REDIS_URL_API_A: "redis://redis_a:6379"
+      REDIS_URL_API_B: "redis://redis_b:6379"
+      REDIS_URL_API_C: "redis://redis_c:6379"
+      REDIS_URL_APP_D: "redis://redis_d:6379"
+      REDIS_URL_APP_E: "redis://redis_e:6379"
+    # `apk add docker-cli` (the resilience test calls `docker stop/start`),
+    # then install npm deps, then run Node's built-in test runner with the
+    # spec reporter so the user sees every assertion in `docker logs`.
+    command: sh -lc "apk add --no-cache docker-cli >/dev/null && cd /workspace/poc/e2e-tests && npm install --no-audit --no-fund --silent && node --test --test-reporter=spec run.test.mjs"
 
 volumes:
   mariadb_data:
@@ -229,9 +297,6 @@ volumes:
   api_c_app_modules:
   app_d_lib_modules:
   app_d_app_modules:
-  app_d_nuxt_dir:
-  app_d_output_dir:
   app_e_lib_modules:
   app_e_app_modules:
-  app_e_next_dir:
-  app_e_swc_dir:
+  e2e_tests_modules:
