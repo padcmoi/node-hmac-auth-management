@@ -24,14 +24,14 @@ package "@naskot/node-hmac-auth-management" as Lib {
   component "state/propagation-key-cache\n(1 read per boot)" as Cache
 }
 
-package "@naskot/node-hmac-auth (>=1.3.0, peerDep)" as Upstream {
+package "@naskot/node-hmac-auth (>=1.4.0, peerDep)" as Upstream {
   component "initializeHmacHttpAuth\n+ clients CRUD\n+ propagateClientToApis\n+ createHttpSignedFetchClient" as HttpInit
   component "initializeHmacMessageAuth\n+ clients CRUD" as MsgInit
 }
 
 database "Source local Redis\n(via upstream lib)" as RedisSource
 
-cloud "Federation of targets\n(any v1.3.0+ API)" as Targets
+cloud "Federation of targets\n(any v1.4.0+ API)" as Targets
 
 ' --- consumer wiring ---
 Trigger --> Track : mgmt.http.sync()

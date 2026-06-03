@@ -7,7 +7,7 @@ This document describes the internal source layout of `@naskot/node-hmac-auth-ma
 - Keep one stable public entrypoint: `src/index.ts`.
 - Group implementation by domain (`core`, `management`, `state`).
 - Stay framework-agnostic. The lib never imports Express, NestJS, or any storage driver.
-- Reuse every primitive from `@naskot/node-hmac-auth >=1.3.0` through its public surface; never reach into upstream internals.
+- Reuse every primitive from `@naskot/node-hmac-auth >=1.4.0` through its public surface; never reach into upstream internals.
 
 ## Source layout
 
@@ -42,7 +42,7 @@ src/
   - `track.ts` builds the 9-method surface. Enforces 2 invariants up front: (a) `add`/`update`/`remove` only write to the BDD via the CRUD, never the network; (b) `add`/`update`/`remove` on the propagation-key clientId are refused with `PROPAGATION_KEY_REMOVE_FORBIDDEN`.
   - `sync.ts` is the worker. Orchestrates 4 phases per call: probe + bootstrap (A), propagation-key BDD finalize (B), data-plane atomic propagation with rollback (C), best-effort delete (D). Implements the per-(row, target) cursor write through `crud.setDeliveryState`.
   - `push.ts` encapsulates the upstream's `propagateClientToApis` call for one row, one operation, one target, plus the create<->update swap retry on the two well-known FORBIDDEN messages.
-  - `health.ts` issues a single `GET internalManagementRoute` probe and normalizes the response into a `TargetHealth` (defaults `bootstrapLocked: false` so consumers targeting `< v1.3.0` keep working).
+  - `health.ts` issues a single `GET internalManagementRoute` probe and normalizes the response into a `TargetHealth` (defaults `bootstrapLocked: false` so consumers targeting `< v1.4.0` keep working).
 
 - **`state`**: per-instance caches.
   - `propagation-key-cache.ts` caches the propagation-key row for the management instance lifetime. Refreshed after any internal mutation (status flip, targets union, secret clear).

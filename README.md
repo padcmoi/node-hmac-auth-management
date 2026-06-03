@@ -2,7 +2,7 @@
 
 Stateful orchestration layer on top of [`@naskot/node-hmac-auth`](https://github.com/padcmoi/node-hmac-auth). The consumer drives a BDD via a CRUD; the lib is the worker that probes targets, bootstraps the propagation key, propagates data-plane credentials, retries idempotently, and rolls back atomically on partial failure.
 
-`@naskot/node-hmac-auth >=1.3.0` is a strict peer dependency: the lib uses `requireBootstrapClientId` (F2) and `purpose: "propagation-only"` (F1) from the upstream v1.3.0 release.
+`@naskot/node-hmac-auth >=1.4.0` is a strict peer dependency: the lib uses `requireBootstrapClientId` (F2, federation-default since v1.4.0) and `purpose: "propagation-only"` (F1) from the upstream release.
 
 [![npm version](https://img.shields.io/npm/v/%40naskot%2Fnode-hmac-auth-management)](https://www.npmjs.com/package/@naskot/node-hmac-auth-management)
 [![TypeScript Ready](https://img.shields.io/badge/TypeScript-Ready-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)

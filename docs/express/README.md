@@ -28,7 +28,7 @@ const hmacHttpAuth = initializeHmacHttpAuth({
   namespace: "my-authority",
   secretToken: process.env.HMAC_SECRET_TOKEN,
   internalManagementRoute: "/api/internal/hmac",
-  // Recommended: lock the API behind a named propagation-key clientId.
+  // v1.4.0: MANDATORY. Locks the API until this clientId is stored.
   requireBootstrapClientId: "self_propagation_signer",
 });
 

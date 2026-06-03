@@ -4,7 +4,7 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and S
 
 ## [0.1.0] - 2026-06-01
 
-Initial release. Strictly additive on top of `@naskot/node-hmac-auth >=1.3.0` (declared as a peer dependency).
+Initial release. Strictly additive on top of `@naskot/node-hmac-auth >=1.4.0` (declared as a peer dependency).
 
 - `chore(tooling): scaffold v0.1.0 package metadata (package.json, tsconfig, eslint, prettier, .vscode, .github/workflows publish.yml)`
 - `feat(core): public types + HmacAuthMgmtError with 8 codes (PROPAGATION_KEY_REMOVE_FORBIDDEN, PROPAGATION_KEY_MISSING, MANAGED_ROW_NOT_FOUND, MANAGED_ROW_ALREADY_EXISTS, INVALID_OPTIONS, INVALID_INPUT, TARGET_PROBE_FAILED, INTERNAL_ERROR) + deriveSecretV1 FROZEN derivation primitive`
