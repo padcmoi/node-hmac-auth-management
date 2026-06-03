@@ -1,10 +1,8 @@
 import { defineEventHandler, getRouterParam } from "h3";
 
 export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, "id") ?? "";
   const config = useRuntimeConfig();
-  const response = await fetch(`${config.adminApiABase as string}/admin/rows/${id}`, {
-    method: "DELETE",
-  });
+  const id = getRouterParam(event, "id");
+  const response = await fetch(`${config.adminApiABase as string}/admin/data-plane/${id}/delivery-states`);
   return response.json();
 });

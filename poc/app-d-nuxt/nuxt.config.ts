@@ -16,7 +16,6 @@ export default defineNuxtConfig({
     hmacNamespace: process.env.HMAC_NAMESPACE ?? "app_d",
     hmacSecretToken: process.env.HMAC_SECRET_TOKEN ?? "token_delta_D",
     hmacInternalManagementRoute: process.env.HMAC_INTERNAL_MANAGEMENT_ROUTE ?? "/api/internal/hmac",
-    hmacPropagationKey: process.env.HMAC_PROPAGATION_KEY ?? "self_propagation_signer",
     signingClientId: process.env.SIGNING_CLIENT_ID ?? "client_consumer_d",
     peerApiA: process.env.PEER_API_A ?? "http://api_a:3000",
     peerApiB: process.env.PEER_API_B ?? "http://api_b:3000",
