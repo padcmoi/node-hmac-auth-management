@@ -1,5 +1,9 @@
 import { HmacAuthMgmtError } from "../core/errors.js";
-import type { CreateHmacAuthManagementOptions, HmacAuthManagement } from "../core/types.js";
+import {
+  DEFAULT_PROPAGATION_KEY_CLIENT_ID,
+  type CreateHmacAuthManagementOptions,
+  type HmacAuthManagement,
+} from "../core/types.js";
 import { createPropagationKeyCache } from "../state/propagation-key-cache.js";
 import { runAutoSeed } from "./auto-seed.js";
 import { createTrack } from "./track.js";
@@ -31,9 +35,10 @@ export async function createHmacAuthManagement(options: CreateHmacAuthManagement
   if (!options?.hmacHttpAuth) {
     throw new HmacAuthMgmtError("INVALID_OPTIONS", "hmacHttpAuth is required", 400);
   }
-  if (!options.propagationKey || !options.propagationKey.trim()) {
-    throw new HmacAuthMgmtError("INVALID_OPTIONS", "propagationKey must be a non-empty clientId", 400);
-  }
+  const propagationKey =
+    typeof options.propagationKey === "string" && options.propagationKey.trim()
+      ? options.propagationKey.trim()
+      : DEFAULT_PROPAGATION_KEY_CLIENT_ID;
   if (!options.http?.crud) {
     throw new HmacAuthMgmtError("INVALID_OPTIONS", "http.crud is required", 400);
   }
@@ -62,13 +67,14 @@ export async function createHmacAuthManagement(options: CreateHmacAuthManagement
 
   await runAutoSeed({
     crud: options.http.crud,
-    propagationKey: options.propagationKey,
+    propagationKey,
+    propagationKeyTargets: options.propagationKeyTargets,
     secretToken,
     trackLabel: "http",
     logger: options.logger,
   });
 
-  const propagationKeyCache = createPropagationKeyCache(options.http.crud, options.propagationKey);
+  const propagationKeyCache = createPropagationKeyCache(options.http.crud, propagationKey);
 
   const httpTrack = createTrack({
     trackStore: "http",
@@ -76,7 +82,7 @@ export async function createHmacAuthManagement(options: CreateHmacAuthManagement
     hmacMessageAuth: options.hmacMessageAuth,
     crud: options.http.crud,
     sourceClients: httpSourceClients,
-    propagationKey: options.propagationKey,
+    propagationKey: propagationKey,
     propagationKeyCache,
     secretToken,
     logger: options.logger,
@@ -99,7 +105,7 @@ export async function createHmacAuthManagement(options: CreateHmacAuthManagement
       hmacMessageAuth: options.hmacMessageAuth,
       crud: options.message.crud,
       sourceClients: messageSourceClients,
-      propagationKey: options.propagationKey,
+      propagationKey: propagationKey,
       propagationKeyCache,
       secretToken,
       logger: options.logger,
@@ -107,7 +113,7 @@ export async function createHmacAuthManagement(options: CreateHmacAuthManagement
   }
 
   const management: HmacAuthManagement = {
-    propagationKey: options.propagationKey,
+    propagationKey: propagationKey,
     http: httpTrack,
     message: messageTrack,
   };

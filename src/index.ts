@@ -12,6 +12,8 @@ export type { HmacAuthMgmtErrorCode } from "./core/errors.js";
 
 export { deriveSecretV1 } from "./core/derive.js";
 
+export { DEFAULT_PROPAGATION_KEY_CLIENT_ID } from "./core/types.js";
+
 export type {
   AddTrackInput,
   CreateHmacAuthManagementOptions,

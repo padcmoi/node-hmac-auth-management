@@ -142,6 +142,15 @@ export interface ManagedTrackOptions {
   crud: ManagedCrud;
 }
 
+/**
+ * v0.2.0 (BREAKING): the propagation-key clientId is now optional. When
+ * omitted, the lib uses the federation-default name
+ * (`DEFAULT_PROPAGATION_KEY_CLIENT_ID` mirrored from upstream). A consumer
+ * can still override it to opt out of the federation, but in practice every
+ * production deployment should leave it unset.
+ */
+export const DEFAULT_PROPAGATION_KEY_CLIENT_ID = "self_propagation_signer";
+
 export interface CreateHmacAuthManagementOptions {
   hmacHttpAuth: InitializedHmacHttpAuth;
   hmacMessageAuth?: InitializedHmacMessageAuth;
@@ -151,8 +160,20 @@ export interface CreateHmacAuthManagementOptions {
    *   - auto-seed on boot when the consumer BDD does not hold the row
    *   - refusal of `remove()` on this clientId
    *   - special atomicity rules in sync()
+   * Defaults to `DEFAULT_PROPAGATION_KEY_CLIENT_ID` (`"self_propagation_signer"`).
    */
-  propagationKey: string;
+  propagationKey?: string;
+  /**
+   * Inalienable target federation declared by the source. The
+   * propagation-key row is auto-seeded with these targets at boot, and
+   * every subsequent boot unions any newly declared target into the
+   * existing row (the lib never shrinks the row's target list on its
+   * own). A target that disappears from this list stays in the row
+   * until the operator removes it through the consumer admin surface;
+   * a target whose own Redis is intentionally flushed is re-bootstrapped
+   * on the next sync (trap 4 detection).
+   */
+  propagationKeyTargets?: string[];
   http: ManagedTrackOptions;
   message?: ManagedTrackOptions;
   logger?: ManagementLogger;
